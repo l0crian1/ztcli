@@ -5,6 +5,7 @@ import json
 import re
 import os
 import requests
+from io import StringIO
 
 
 network_commands = {
@@ -345,6 +346,27 @@ network_commands = {
     "info": {
       "description": "Show information for local Node",
       "command": "zerotier-cli info"
+    },
+    "metrics": {
+      "description": "Show Metric information",
+      "acceptedpackets": {          
+        "description": "Show allowed/blocked metrics",
+      },
+      "errors": {          
+        "description": "Show error metrics",
+      },
+      "latency": {          
+        "description": "Show per node latency numbers by packet",
+      },
+      "peerpackets": {          
+        "description": "Show Peer Packet Cout",
+      },
+      "packettype": {          
+        "description": "Show Packet Type",
+      },
+      "protocols": {          
+        "description": "Show counts per protocol",
+      }
     },
     "peers": {
       "description": "List all peers",
@@ -717,7 +739,152 @@ def show_peer_details():
             if i['nodeId'] in localNodeList:
                 controllerNodeList.append([i['name'], i['nodeId'], i['description'], i['config']['ipAssignments'], i['networkId'], i['clientVersion']])
     print_table(tableHeaders, controllerNodeList)
-     
+
+def show_metrics():
+    accepted_packets_list = []
+    errors_list =  []
+    latency_list = []
+    peer_packet_list = []
+    packet_type_list = []
+    protocol_list = []
+    try:
+        with open('metricstoken.secret', 'r') as file:
+            authtoken = file.read()
+    except FileNotFoundError:
+        print('authtoken.secret not found! This should have been created when installing ZeroTier')
+        
+    url = f'http://127.0.0.1:9993/metrics'
+
+    headers = {
+        "X-ZT1-Auth": authtoken
+    }
+
+    response = requests.get(url, headers=headers)
+    #print(response)
+    if response.status_code == 200:
+        network_data = response
+    else:
+        print(f'Error Code: {response.status_code}')
+    #print(network_data.text)
+    for i in network_data.text.split('\n'):
+        if 'packettype' in userInput:
+            if 'packet_type=' in i:
+                packet_type_list.append(i.replace('zt_packet{','').replace('"} ', '",').replace('direction="tx"', 'tx').replace('direction="rx"', 'rx').replace('packet_type="', '').replace('"', '').split(','))
+        elif 'errors' in userInput:
+            if 'error_type=' in i:
+                errors_list.append(i.replace('zt_packet_error{','').replace('"} ', '",').replace('direction="tx"', 'tx').replace('direction="rx"', 'rx').replace('error_type="', '').replace('"', '').split(','))            
+        elif 'acceptedpackets' in userInput:
+            if 'zt_network_packets{' in i:
+                accepted_packets_list.append(i.replace('zt_network_packets{','').replace('"', '').replace('accepted=', '').replace('direction=', '').replace('network_id=', '').replace('} ', ',').split(','))
+        elif 'protocols' in userInput:
+            if 'protocol="' in i:
+                protocol_list.append(i.replace('zt_data{','').replace('"', '').replace('protocol=', '').replace('direction=', '').replace('} ', ',').split(','))
+        elif 'peerpackets' in userInput:
+            if 'zt_peer_packets{' in i:
+                peer_packet_list.append(i.replace('zt_peer_packets{','').replace('"', '').replace('direction=', '').replace('node_id=', '').replace('} ', ',').split(','))
+        elif 'latency' in userInput:
+            if 'zt_peer_latency_bucket{' in i:
+                latency_list.append(i.replace('zt_peer_latency_bucket{','').replace('"', '').replace('node_id=', '').replace('} ', ',').split(','))
+    if 'peerpackets' in userInput:
+        # Initialize a dictionary to store aggregated counts
+        aggregated_counts = {}
+
+        # Process and aggregate the data
+        for direction, peer_pack, count in peer_packet_list:
+            count = int(count)
+
+            if peer_pack not in aggregated_counts:
+                aggregated_counts[peer_pack] = {'rx': 0, 'tx': 0}
+            
+            aggregated_counts[peer_pack][direction] += count
+
+        # Convert the aggregated data to a list of lists for tabulate
+
+        sorted_list = sorted([[peer_pack, counts['rx'], counts['tx']] for peer_pack, counts in aggregated_counts.items()], key=lambda x: x[0])
+        # Print the formatted data using tabulate
+        print(tabulate(sorted_list, headers=["Protocol", "RX Count", "TX Count"], tablefmt="github"))
+    elif 'protocols' in userInput:
+        # Initialize a dictionary to store aggregated counts
+        aggregated_counts = {}
+
+        # Process and aggregate the data
+        for direction, proto_type, count in protocol_list:
+            count = int(count)
+
+            if proto_type not in aggregated_counts:
+                aggregated_counts[proto_type] = {'rx': 0, 'tx': 0}
+            
+            aggregated_counts[proto_type][direction] += count
+
+        # Convert the aggregated data to a list of lists for tabulate
+
+        sorted_list = sorted([[proto_type, counts['rx'], counts['tx']] for proto_type, counts in aggregated_counts.items()], key=lambda x: x[0])
+        # Print the formatted data using tabulate
+        print(tabulate(sorted_list, headers=["Protocol", "RX Count", "TX Count"], tablefmt="github"))
+    elif 'packettype' in userInput:
+        # Initialize a dictionary to store aggregated counts
+        aggregated_counts = {}
+
+        # Process and aggregate the data
+        for direction, packet_type, count in packet_type_list:
+            count = int(count)
+
+            if packet_type not in aggregated_counts:
+                aggregated_counts[packet_type] = {'rx': 0, 'tx': 0}
+            
+            aggregated_counts[packet_type][direction] += count
+
+        # Convert the aggregated data to a list of lists for tabulate
+
+        sorted_list = sorted([[error_type, counts['rx'], counts['tx']] for error_type, counts in aggregated_counts.items()], key=lambda x: x[0])
+        # Print the formatted data using tabulate
+        print(tabulate(sorted_list, headers=["Packet Type", "RX Count", "TX Count"], tablefmt="github"))
+    elif 'errors' in userInput:
+        # Initialize a dictionary to store aggregated counts
+        aggregated_counts = {}
+
+        # Process and aggregate the data
+        for direction, error_type, count in errors_list:
+            count = int(count)
+
+            if error_type not in aggregated_counts:
+                aggregated_counts[error_type] = {'rx': 0, 'tx': 0}
+            
+            aggregated_counts[error_type][direction] += count
+
+        # Convert the aggregated data to a list of lists for tabulate
+        sorted_list = sorted([[error_type, counts['rx'], counts['tx']] for error_type, counts in aggregated_counts.items()], key=lambda x: x[0])
+        print(tabulate(sorted_list, headers=["Error Type", "RX Count", "TX Count"], tablefmt="github"))
+    elif 'acceptedpackets' in userInput:
+        sorted_list = sorted(accepted_packets_list, key=lambda x: (x[2], x[0]))
+
+        print(tabulate(sorted_list, headers=["Allowed", "Direction", "NetworkID", "Count"], tablefmt="github"))
+    elif 'latency' in userInput:
+        # Initialize a dictionary to store the data
+        # Initialize a dictionary to store the data
+        node_data = {}
+
+        # Process the data to merge values
+        for node_id, le_value, count in latency_list:
+            if node_id not in node_data:
+                node_data[node_id] = {}
+            node_data[node_id][le_value] = int(count)
+
+        # Headers for the table
+        headers = ["NodeID", "le=1", "le=3", "le=6", "le=10", "le=30", "le=60", "le=100", "le=300", "le=600", "le=1000", "le=+Inf"]
+
+        # Convert the processed data to a list for printing
+        table_data = []
+
+        for node_id, counts in sorted(node_data.items()):
+            row = [node_id] + [counts.get(le, 0) for le in headers[1:]]
+            table_data.append(row)
+
+        sorted_list = sorted(table_data, key=lambda x: (x[2], x[0]))
+
+        print(tabulate(sorted_list, headers=["NodeID", "le=1", "le=3", "le=6", "le=10", "le=30", "le=60", "le=100", "le=300", "le=600", "le=1000", "le=+Inf", ], tablefmt="github"))
+
+
 dictString = "network_commands"
 current_level = eval(dictString)
 last_value = []
@@ -732,6 +899,8 @@ def cli():
             show_controller()
         elif '?' in userInput:
             context_help(userInput)
+        elif 'show metrics' in ' '.join(userInput):
+            show_metrics()
         elif not userInput:
             continue
         elif 'show peers detail' in ' '.join(userInput):
