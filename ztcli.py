@@ -370,6 +370,9 @@ network_commands = {
     },
     "peers": {
       "description": "List all peers",
+      "all": {          
+        "description": "List all Peers on Zerotier Central Account"
+        },
       "command": "zerotier-cli listpeers",
       "detail": {          
         "description": "Detailed view of Active Peers"
@@ -760,12 +763,10 @@ def show_metrics():
     }
 
     response = requests.get(url, headers=headers)
-    #print(response)
     if response.status_code == 200:
         network_data = response
     else:
         print(f'Error Code: {response.status_code}')
-    #print(network_data.text)
     for i in network_data.text.split('\n'):
         if 'packettype' in userInput:
             if 'packet_type=' in i:
@@ -786,10 +787,8 @@ def show_metrics():
             if 'zt_peer_latency_bucket{' in i:
                 latency_list.append(i.replace('zt_peer_latency_bucket{','').replace('"', '').replace('node_id=', '').replace('} ', ',').split(','))
     if 'peerpackets' in userInput:
-        # Initialize a dictionary to store aggregated counts
         aggregated_counts = {}
 
-        # Process and aggregate the data
         for direction, peer_pack, count in peer_packet_list:
             count = int(count)
 
@@ -798,16 +797,11 @@ def show_metrics():
             
             aggregated_counts[peer_pack][direction] += count
 
-        # Convert the aggregated data to a list of lists for tabulate
-
         sorted_list = sorted([[peer_pack, counts['rx'], counts['tx']] for peer_pack, counts in aggregated_counts.items()], key=lambda x: x[0])
-        # Print the formatted data using tabulate
         print(tabulate(sorted_list, headers=["Protocol", "RX Count", "TX Count"], tablefmt="github"))
     elif 'protocols' in userInput:
-        # Initialize a dictionary to store aggregated counts
         aggregated_counts = {}
 
-        # Process and aggregate the data
         for direction, proto_type, count in protocol_list:
             count = int(count)
 
@@ -816,16 +810,11 @@ def show_metrics():
             
             aggregated_counts[proto_type][direction] += count
 
-        # Convert the aggregated data to a list of lists for tabulate
-
         sorted_list = sorted([[proto_type, counts['rx'], counts['tx']] for proto_type, counts in aggregated_counts.items()], key=lambda x: x[0])
-        # Print the formatted data using tabulate
         print(tabulate(sorted_list, headers=["Protocol", "RX Count", "TX Count"], tablefmt="github"))
     elif 'packettype' in userInput:
-        # Initialize a dictionary to store aggregated counts
         aggregated_counts = {}
 
-        # Process and aggregate the data
         for direction, packet_type, count in packet_type_list:
             count = int(count)
 
@@ -834,16 +823,11 @@ def show_metrics():
             
             aggregated_counts[packet_type][direction] += count
 
-        # Convert the aggregated data to a list of lists for tabulate
-
         sorted_list = sorted([[error_type, counts['rx'], counts['tx']] for error_type, counts in aggregated_counts.items()], key=lambda x: x[0])
-        # Print the formatted data using tabulate
         print(tabulate(sorted_list, headers=["Packet Type", "RX Count", "TX Count"], tablefmt="github"))
     elif 'errors' in userInput:
-        # Initialize a dictionary to store aggregated counts
         aggregated_counts = {}
 
-        # Process and aggregate the data
         for direction, error_type, count in errors_list:
             count = int(count)
 
@@ -852,28 +836,21 @@ def show_metrics():
             
             aggregated_counts[error_type][direction] += count
 
-        # Convert the aggregated data to a list of lists for tabulate
         sorted_list = sorted([[error_type, counts['rx'], counts['tx']] for error_type, counts in aggregated_counts.items()], key=lambda x: x[0])
         print(tabulate(sorted_list, headers=["Error Type", "RX Count", "TX Count"], tablefmt="github"))
     elif 'acceptedpackets' in userInput:
         sorted_list = sorted(accepted_packets_list, key=lambda x: (x[2], x[0]))
-
         print(tabulate(sorted_list, headers=["Allowed", "Direction", "NetworkID", "Count"], tablefmt="github"))
     elif 'latency' in userInput:
-        # Initialize a dictionary to store the data
-        # Initialize a dictionary to store the data
         node_data = {}
 
-        # Process the data to merge values
         for node_id, le_value, count in latency_list:
             if node_id not in node_data:
                 node_data[node_id] = {}
             node_data[node_id][le_value] = int(count)
 
-        # Headers for the table
         headers = ["NodeID", "le=1", "le=3", "le=6", "le=10", "le=30", "le=60", "le=100", "le=300", "le=600", "le=1000", "le=+Inf"]
 
-        # Convert the processed data to a list for printing
         table_data = []
 
         for node_id, counts in sorted(node_data.items()):
@@ -883,6 +860,69 @@ def show_metrics():
         sorted_list = sorted(table_data, key=lambda x: (x[2], x[0]))
 
         print(tabulate(sorted_list, headers=["NodeID", "le=1", "le=3", "le=6", "le=10", "le=30", "le=60", "le=100", "le=300", "le=600", "le=1000", "le=+Inf", ], tablefmt="github"))
+
+def show_peer_all():
+    global response
+
+    tableHeaders = ['Name', 'NodeID', 'Description', 'ZeroTier IP', 'Network', 'Version']
+    try:
+        with open('zt_central_api.secret', 'r') as file:
+            api_token = file.read()
+    except FileNotFoundError:
+        api_token = input("ZeroTier API Secret file not found, please enter the ZeroTier Central API Key: ")
+        with open('zt_central_api.secret', 'w') as file:
+            file.write(api_token)
+            print(f"File zt_central_api.secret created with token: {api_token}")
+            
+    try:
+        with open('authtoken.secret', 'r') as file:
+            authtoken = file.read()
+    except FileNotFoundError:
+        print('authtoken.secret not found! This should have been created when installing ZeroTier')
+
+    localNodeList = []
+    controllerNodeList = []
+    controllerNetworkList = []
+
+    def zt_central_api(url):
+        headers = {
+            'Authorization': f'token {api_token}'
+        }
+
+        return requests.get(url, headers=headers)
+    
+    def zt_service_api():
+        url = f'http://127.0.0.1:9993/peer'
+
+        headers = {
+            "X-ZT1-Auth": authtoken
+        }
+
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            network_data = response.json()
+            for peers in network_data:
+                localNodeList.append(peers['address'])
+        else:
+            print(f'Error Code: {response.status_code}')
+            
+    zt_service_api()
+    response = zt_central_api('https://api.zerotier.com/api/v1/network')
+    if response.status_code == 200:
+        network_data = response.json()
+        for networks in network_data:
+            controllerNetworkList.append(networks['id'])
+    else:
+        print(f'Error Code: {response.status_code}')
+
+    for controllerNode in controllerNetworkList:
+        response = zt_central_api(f'https://api.zerotier.com/api/v1/network/{controllerNode}/member')
+        network_data = response.json()
+        for i in network_data:
+            controllerNodeList.append([i['name'], i['nodeId'], i['description'], i['config']['ipAssignments'], i['networkId'], i['clientVersion']])
+    sorted_list = sorted(controllerNodeList, key=lambda x: x[0].lower())
+    print(sorted_list)
+    print_table(tableHeaders, sorted_list)
 
 
 dictString = "network_commands"
@@ -905,7 +945,10 @@ def cli():
             continue
         elif 'show peers detail' in ' '.join(userInput):
             show_peer_details()
-            continue
+            #continue
+        elif 'show peers all' in ' '.join(userInput):
+            show_peer_all()
+            #continue
         elif 'show' in userInput or 'restart' in userInput:
             if show():
                 continue
