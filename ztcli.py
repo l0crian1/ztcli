@@ -659,7 +659,7 @@ def show_controller():
 def show_peer_details():
     global response
 
-    tableHeaders = ['Name', 'NodeID', 'ZeroTier IP', 'Network', 'Version']
+    tableHeaders = ['Name', 'NodeID', 'Description', 'ZeroTier IP', 'Network', 'Version']
     try:
         with open('zt_central_api.secret', 'r') as file:
             api_token = file.read()
@@ -715,7 +715,7 @@ def show_peer_details():
         network_data = response.json()
         for i in network_data:
             if i['nodeId'] in localNodeList:
-                controllerNodeList.append([i['name'], i['nodeId'], i['config']['ipAssignments'], i['networkId'], i['clientVersion']])
+                controllerNodeList.append([i['name'], i['nodeId'], i['description'], i['config']['ipAssignments'], i['networkId'], i['clientVersion']])
     print_table(tableHeaders, controllerNodeList)
      
 dictString = "network_commands"
