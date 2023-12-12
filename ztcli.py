@@ -422,7 +422,6 @@ else:
     local_config = default_structure.copy()
     save(local_config, 'local.conf')
 
-
 def create_eval_string(base, inputs):
     for key in inputs:
         base += f"[\"{key}\"]"
@@ -608,6 +607,7 @@ def show():
         
 
 def clear_config(config):
+    global default_structure
     if 'config' in userInput:
         while True:
             userVerification = input("Are you sure you want to clear the running configuration?(yes/no): ")
@@ -741,7 +741,8 @@ def show_peer_details():
         for i in network_data:
             if i['nodeId'] in localNodeList:
                 controllerNodeList.append([i['name'], i['nodeId'], i['description'], i['config']['ipAssignments'], i['networkId'], i['clientVersion']])
-    print_table(tableHeaders, controllerNodeList)
+    sorted_list = sorted(controllerNodeList, key=lambda x: x[0].lower())
+    print_table(tableHeaders, sorted_list)
 
 def show_metrics():
     accepted_packets_list = []
@@ -798,7 +799,7 @@ def show_metrics():
             aggregated_counts[peer_pack][direction] += count
 
         sorted_list = sorted([[peer_pack, counts['rx'], counts['tx']] for peer_pack, counts in aggregated_counts.items()], key=lambda x: x[0])
-        print(tabulate(sorted_list, headers=["Protocol", "RX Count", "TX Count"], tablefmt="github"))
+        print(tabulate(sorted_list, headers=["Peer", "RX Count", "TX Count"], tablefmt="github"))
     elif 'protocols' in userInput:
         aggregated_counts = {}
 
@@ -860,7 +861,9 @@ def show_metrics():
         sorted_list = sorted(table_data, key=lambda x: (x[2], x[0]))
 
         print(tabulate(sorted_list, headers=["NodeID", "le=1", "le=3", "le=6", "le=10", "le=30", "le=60", "le=100", "le=300", "le=600", "le=1000", "le=+Inf", ], tablefmt="github"))
-
+    else:
+        print("invalid entry")
+        
 def show_peer_all():
     global response
 
@@ -921,7 +924,6 @@ def show_peer_all():
         for i in network_data:
             controllerNodeList.append([i['name'], i['nodeId'], i['description'], i['config']['ipAssignments'], i['networkId'], i['clientVersion']])
     sorted_list = sorted(controllerNodeList, key=lambda x: x[0].lower())
-    print(sorted_list)
     print_table(tableHeaders, sorted_list)
 
 
